@@ -20,10 +20,13 @@ from . import _version as _build_version
 T = TypeVar("T")
 
 def _get_default_json_content() -> str:
-    desktop_path = Path.home() / "Desktop"
-    desktop_str = str(desktop_path).replace("\\", "/")
+    if getattr(sys, "frozen", False):
+        default_path = Path(sys.executable).parent
+    else:
+        default_path = Path(__file__).resolve().parents[1]
+    default_str = str(default_path).replace("\\", "/")
     content = {
-        "CHOSEN_FOLDER": desktop_str,
+        "CHOSEN_FOLDER": default_str,
         "AUTO_DELETE": False,
         "TIMER_MINUTES": 15
     }
@@ -206,13 +209,24 @@ MAX_SEARCH_RESULTS = 20
 AUTO_DELETE        = _get("AUTO_DELETE",        False)
 TIMER_MINUTES      = _get("TIMER_MINUTES",      15)
 STEAM_MANIFEST_PATH = _get("STEAM_MANIFEST_PATH", None)
+# Discord never reads appmanifest_<appid>.acf - the registry entry is what
+# matters. Writing the manifest only makes the fake folder look real.
+STEAM_WRITE_APPMANIFEST = _get("STEAM_WRITE_APPMANIFEST", True)
+# Title of the timer window shown by a faked process.
+# Baked in when the fake is created, otherwise derived from the exe name.
+WINDOW_TITLE       = _get("WINDOW_TITLE",       None)
 
-# Resolve CHOSEN_FOLDER as a Path object
-default_folder = str(Path.home() / "Desktop")
+# Resolve CHOSEN_FOLDER as a Path object (defaults to beside the python file / project root, or beside exe when frozen)
+if getattr(sys, "frozen", False):
+    default_folder = str(Path(sys.executable).parent)
+else:
+    default_folder = str(Path(__file__).resolve().parents[1])
 chosen_folder_val = _get("CHOSEN_FOLDER", default_folder)
 if isinstance(chosen_folder_val, str):
     if chosen_folder_val.strip() == "Desktop" or not chosen_folder_val.strip():
         CHOSEN_FOLDER = Path.home() / "Desktop"
+    elif chosen_folder_val.strip() == ".":
+        CHOSEN_FOLDER = Path(__file__).resolve().parents[1]
     else:
         CHOSEN_FOLDER = Path(chosen_folder_val)
 else:

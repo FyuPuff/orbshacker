@@ -56,14 +56,16 @@ def show_console() -> None:
 
 if __name__ == "__main__":
     if is_faked_game() or "--timer-mode" in sys.argv:
+        from orbshacker import config
         from orbshacker.timer import run_timer
-        try:
-            idx = sys.argv.index("--timer-mode")
-            minutes = int(sys.argv[idx + 1])
-        except (ValueError, IndexError):
-            from orbshacker import config
-            minutes = config.TIMER_MINUTES
-        run_timer(minutes)
+        minutes = config.TIMER_MINUTES
+        if "--timer-mode" in sys.argv:
+            try:
+                idx = sys.argv.index("--timer-mode")
+                minutes = int(sys.argv[idx + 1])
+            except (ValueError, IndexError):
+                pass
+        run_timer(minutes, config.WINDOW_TITLE)
     else:
         show_console()
         from orbshacker.main import main

@@ -228,9 +228,101 @@ def test_load_settings_baked_frozen(tmp_path):
     
     with patch("sys.frozen", True, create=True), \
          patch("sys.executable", str(exe_path)):
-         
+          
         settings = _load_settings()
         assert isinstance(settings, dict)
         assert settings.get("CHOSEN_FOLDER") == "BakedDir"
         assert settings.get("AUTO_DELETE") is True
         assert settings.get("TIMER_MINUTES") == 45
+
+
+# ── Timer window title ────────────────────────────────────────────────────────
+
+def test_format_title():
+    from orbshacker.timer import format_title
+    assert format_title("Counter-Strike 2") == "Counter Strike 2"
+    assert format_title("split_gate") == "split gate"
+    assert format_title("   ") == "Timer"
+
+
+def test_window_title_prefers_baked_game_name():
+    from orbshacker.timer import resolve_window_title
+    with patch("sys.executable", "C:/Win64/TslGame.exe"):
+        assert resolve_window_title("PUBG: Battlegrounds") == "PUBG: Battlegrounds"
+
+
+def test_window_title_falls_back_to_exe_name():
+    from orbshacker.timer import resolve_window_title
+    with patch("sys.executable", "C:/Win64/old school runescape/client/osclient.exe"):
+        assert resolve_window_title(None) == "osclient"
+    with patch("sys.executable", "C:/Win64/split_gate.exe"):
+        assert resolve_window_title("") == "split gate"
+
+
+def test_timer_app_uses_game_name_as_title():
+    from orbshacker.timer import TimerApp
+    root = MagicMock()
+    with patch.object(TimerApp, "_tick"):
+        TimerApp(root, minutes=15, title="Marvel Snap")
+    root.title.assert_called_once_with("Marvel Snap")
+
+
+def test_baked_config_includes_window_title(tmp_path):
+    # Frozen mode: the game name is appended to the fake exe for the timer to read
+    import json
+    import orbshacker.config as config
+    with patch("orbshacker.config.AUTO_DELETE", False), \
+         patch("orbshacker.config.TIMER_MINUTES", 15), \
+         patch.object(config, "STEAM_MANIFEST_PATH", None, create=True):
+
+        faker = GameFaker()
+        faker._frozen = True
+        dummy_src = tmp_path / "orbshacker.exe"
+        dummy_src.write_bytes(b"MZ_DUMMY")
+        faker._source_exe = dummy_src
+
+        target_exe = tmp_path / "Win64" / "dd2.exe"
+        faker.copy_exe_to(target_exe, title="Dragon's Dogma 2")
+
+        raw = target_exe.read_bytes()
+        marker = b"__ORBSHACKER_BAKED_CONFIG__"
+        baked = json.loads(raw.split(marker)[-2].decode("utf-8"))
+        assert baked["WINDOW_TITLE"] == "Dragon's Dogma 2"
+
+
+def test_source_timer_script_bakes_window_title(tmp_path):
+    # Source mode: the .pyw script gets the game name baked in
+    with patch("orbshacker.config.AUTO_DELETE", False), \
+         patch("orbshacker.config.TIMER_MINUTES", 20):
+
+        faker = GameFaker()
+        faker._frozen = False
+        dummy_src = tmp_path / "pythonw.exe"
+        dummy_src.touch()
+        faker._source_exe = dummy_src
+
+        target_exe = tmp_path / "Win64" / "old school runescape" / "osrs.exe"
+        faker.copy_exe_to(target_exe, title="Old School RuneScape")
+
+        script = target_exe.parent / "_orbshacker_timer.pyw"
+        code = script.read_text(encoding="utf-8")
+        assert "WINDOW_TITLE = 'Old School RuneScape'" in code
+        assert "TIMER_MINUTES = 20" in code
+        assert "root.title(window_title())" in code
+
+
+def test_source_timer_script_defaults_to_exe_name(tmp_path):
+    # No title given: the exe file name is used as the window title
+    faker = GameFaker()
+    faker._frozen = False
+    dummy_src = tmp_path / "pythonw.exe"
+    dummy_src.touch()
+    faker._source_exe = dummy_src
+
+    target_exe = tmp_path / "Win64" / "robloxplayerbeta.exe"
+    faker.copy_exe_to(target_exe)
+
+    code = (target_exe.parent / "_orbshacker_timer.pyw").read_text(encoding="utf-8")
+    assert "WINDOW_TITLE = 'robloxplayerbeta'" in code
+    # the script also knows how to fall back to the running exe name
+    assert "Path(sys.executable).stem" in code

@@ -20,11 +20,17 @@ class ExecutableEntry(TypedDict, total=False):
     name: str
 
 
+class SkuEntry(TypedDict, total=False):
+    distributor: str
+    id: str
+
+
 class GameRecord(TypedDict, total=False):
     id: str
     name: str
     aliases: list[str]
     executables: list[ExecutableEntry]
+    third_party_skus: list[SkuEntry]
 
 
 class DiscordGamesDB:
@@ -117,6 +123,27 @@ class DiscordGamesDB:
     def get_all_executables(self, game: GameRecord) -> list[str]:
         return self._filter_win32_exes(game, skip_patterns=False)
 
+    def has_win32_executable(self, game: GameRecord) -> bool:
+        """True when Discord published a process name for this game.
+
+        Plenty of entries (Marathon, EA Sports FC 27, ...) ship with an empty
+        ``executables`` list, which means process-name spoofing can never match
+        them - those need Steam mode.
+        """
+        return bool(self._filter_win32_exes(game, skip_patterns=False))
+
+    def get_steam_appids(self, game: GameRecord) -> list[str]:
+        """Steam app ids Discord lists for this game, in database order."""
+        return [
+            str(sku.get("id"))
+            for sku in game.get("third_party_skus", []) or []
+            if sku.get("distributor") == "steam" and sku.get("id")
+        ]
+
+    def needs_steam_mode(self, game: GameRecord) -> bool:
+        """True when the game has no process name but has a Steam app id."""
+        return not self.has_win32_executable(game) and bool(self.get_steam_appids(game))
+
 
 # ── Interactive UI ────────────────────────────────────────────────────────────
 
@@ -147,18 +174,19 @@ def _pick_discord_game(db: DiscordGamesDB, query: str) -> GameRecord | None:
             print(f"{Colors.GRAY}{'─' * 75}{Colors.RESET}")
     print()
 
-    raw = input(f"{Colors.BOLD}Select [1-{len(matches)}]{Colors.RESET} (or 'back'): ").strip()
-    if raw.lower() in ('back', 'b', ''):
-        return None
-    try:
-        idx = int(raw)
-        if not 1 <= idx <= len(matches):
-            raise ValueError
-    except ValueError:
-        print_color("\n[ERROR] Enter a valid number", Colors.RED)
-        time.sleep(config.SLEEP_SHORT)
-        return None
-    return matches[idx - 1]
+    while True:
+        raw = input(f"{Colors.BOLD}Select [1-{len(matches)}]{Colors.RESET} (or 'back' for new search): ").strip()
+        if raw.lower() in ('back', 'b', ''):
+            return None
+        try:
+            idx = int(raw)
+            if not 1 <= idx <= len(matches):
+                raise ValueError
+        except ValueError:
+            print_color("\n[ERROR] Enter a valid number", Colors.RED)
+            time.sleep(config.SLEEP_SHORT)
+            continue
+        return matches[idx - 1]
 
 
 def _resolve_discord_exe(db: DiscordGamesDB, game: GameRecord) -> str | None:
@@ -187,43 +215,66 @@ def database_mode(db: DiscordGamesDB, faker: GameFaker) -> None:
     print_color("[*] Examples: PUBG, Fortnite, League, Valorant, Minecraft", Colors.GRAY)
     print()
 
-    query = input(f"{Colors.BOLD}Search{Colors.RESET} (or 'back'): ").strip()
-    if query.lower() in ('back', 'b', ''):
+    while True:
+        query = input(f"{Colors.BOLD}Search{Colors.RESET} (or 'back'): ").strip()
+        if query.lower() in ('back', 'b', ''):
+            return
+
+        selected = _pick_discord_game(db, query)
+        if not selected:
+            continue
+
+        # Games with an empty executables list cannot be matched by process
+        # name at all - Discord only knows them through a store, so send the
+        # user straight to Steam mode with the app id Discord itself lists.
+        if not db.has_win32_executable(selected):
+            steam_ids = db.get_steam_appids(selected)
+            print(f"\n{Colors.BOLD}Game Information:{Colors.RESET}")
+            print(f"  Name:               {Colors.CYAN}{selected.get('name')}{Colors.RESET}")
+            print(f"  ID:                 {Colors.GRAY}{selected.get('id')}{Colors.RESET}")
+            print(f"  {Colors.YELLOW}Process names:   none published by Discord{Colors.RESET}")
+            if steam_ids:
+                print(f"  Steam app id(s):    {Colors.GREEN}{', '.join(steam_ids)}{Colors.RESET}")
+            print(f"\n  {Colors.YELLOW}[!] This game has no process name, so renaming an exe cannot work.{Colors.RESET}")
+
+            if steam_ids and ask_confirm("Use Steam Quest Mode now?"):
+                from .steam import steam_quest_mode
+                steam_quest_mode(faker, preset={"appid": steam_ids[0], "name": selected.get('name')})
+                return
+            print_color("\n[!] Returning to search", Colors.YELLOW)
+            time.sleep(config.SLEEP_SHORT)
+            continue
+
+        loading_animation("Analysing game data", 0.8)
+        exe_name = _resolve_discord_exe(db, selected)
+        if not exe_name:
+            continue
+
+        all_exes = db.get_all_executables(selected)
+
+        print(f"\n{Colors.BOLD}Game Information:{Colors.RESET}")
+        print(f"  Name:               {Colors.CYAN}{selected.get('name')}{Colors.RESET}")
+        print(f"  ID:                 {Colors.GRAY}{selected.get('id')}{Colors.RESET}")
+        print(f"  Primary Executable: {Colors.GREEN}{exe_name}{Colors.RESET}")
+        if len(all_exes) > 1:
+            print(f"  {Colors.GRAY}Other executables: {', '.join(all_exes[1:3])}{Colors.RESET}")
+            if len(all_exes) > 3:
+                print(f"  {Colors.GRAY}(+{len(all_exes) - 3} more executables available){Colors.RESET}")
+        print(f"  Path: {Colors.GRAY}{faker.chosen_path / config.FAKE_EXE_DIR / exe_name}{Colors.RESET}")
+
+        if not ask_confirm():
+            print_color("\n[!] Operation cancelled", Colors.YELLOW)
+            time.sleep(config.SLEEP_SHORT)
+            continue
+
+        result = faker.create_fake_game(exe_name, title=selected.get('name'))
+        if result:
+            print()
+            faker.launch_executable(result)
+            print_color("\n[OK] Setup complete! Discord should detect the game.", Colors.GREEN, bold=True)
+            print_color("[!] IMPORTANT: Discord MUST be running for the spoofing to work", Colors.YELLOW)
+            print_color("[*] Keep the process running until quest is complete", Colors.CYAN)
+            print_color("[*] TIP: Run this tool again to emulate another game simultaneously!", Colors.MAGENTA)
+
+        input(f"\n{Colors.GRAY}Press Enter to continue...{Colors.RESET}")
         return
-
-    selected = _pick_discord_game(db, query)
-    if not selected:
-        return
-
-    loading_animation("Analysing game data", 0.8)
-    exe_name = _resolve_discord_exe(db, selected)
-    if not exe_name:
-        return
-
-    all_exes = db.get_all_executables(selected)
-
-    print(f"\n{Colors.BOLD}Game Information:{Colors.RESET}")
-    print(f"  Name:               {Colors.CYAN}{selected.get('name')}{Colors.RESET}")
-    print(f"  ID:                 {Colors.GRAY}{selected.get('id')}{Colors.RESET}")
-    print(f"  Primary Executable: {Colors.GREEN}{exe_name}{Colors.RESET}")
-    if len(all_exes) > 1:
-        print(f"  {Colors.GRAY}Other executables: {', '.join(all_exes[1:3])}{Colors.RESET}")
-        if len(all_exes) > 3:
-            print(f"  {Colors.GRAY}(+{len(all_exes) - 3} more executables available){Colors.RESET}")
-    print(f"  Path: {Colors.GRAY}{faker.chosen_path / config.FAKE_EXE_DIR / exe_name}{Colors.RESET}")
-
-    if not ask_confirm():
-        print_color("\n[!] Operation cancelled", Colors.YELLOW)
-        time.sleep(config.SLEEP_SHORT)
-        return
-
-    result = faker.create_fake_game(exe_name)
-    if result:
-        print()
-        faker.launch_executable(result)
-        print_color("\n[OK] Setup complete! Discord should detect the game.", Colors.GREEN, bold=True)
-        print_color("[!] IMPORTANT: Discord MUST be running for the spoofing to work", Colors.YELLOW)
-        print_color("[*] Keep the process running until quest is complete", Colors.CYAN)
-        print_color("[*] TIP: Run this tool again to emulate another game simultaneously!", Colors.MAGENTA)
-
-    input(f"\n{Colors.GRAY}Press Enter to continue...{Colors.RESET}")

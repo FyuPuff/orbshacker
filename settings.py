@@ -4,8 +4,8 @@ from pathlib import Path
 # ║  Edit values here. The app reads from this file.         ║
 # ╚═══════════════════════════════════════════════════════════╝
 
-# ── Destination folder for faked executables (defaults to Desktop) ──
-CHOSEN_FOLDER = Path.home() / "Desktop"
+# ── Destination folder for faked executables (defaults to beside this file) ──
+CHOSEN_FOLDER = Path(__file__).parent
 
 # ── Automatically delete faked executables and processes on exit ──
 AUTO_DELETE = False

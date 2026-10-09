@@ -107,7 +107,7 @@ def print_menu() -> None:
 def show_credits() -> None:
     """Display credits."""
     print_boxed_title("CREDITS", width=65, color=Colors.CYAN)
-    credits_text = f"""
+    credits_text = rf"""
     {Colors.BOLD}Developer:{Colors.RESET} {Colors.CYAN}{config.DEVELOPER}{Colors.RESET}
     {Colors.BOLD}Version:{Colors.RESET}   {Colors.WHITE}{config.VERSION}{Colors.RESET}
 
@@ -128,13 +128,15 @@ def show_credits() -> None:
     7. The fake process must stay running for Discord to keep detecting it
     
     {Colors.BOLD}Steam Quest Mode (NEW):{Colors.RESET}
-    Some games (Marathon, Toxic Commando…) require Discord to verify
-    that Steam has at least partially downloaded them.
-    Steam Quest Mode bypasses this by:
-    1. Fetching app info automatically from SteamCMD public API
-    2. Generating a fake appmanifest_<appid>.acf in your steamapps/ folder
-    3. Placing the fake exe directly in steamapps/common/<installdir>/
-    Discord then sees a valid Steam manifest + a running process = quest detected.
+    Some games ship with no process name at all (Marathon, EA Sports FC 27,
+    John Carpenter's Toxic Commando...). Those can only be detected through
+    their store. Steam Quest Mode bypasses this by:
+    1. Taking the Steam app id straight from Discord's own game database
+    2. Registering it under HKCU\Software\Valve\Steam\Apps\<appid>,
+       which is the list Discord's Steam observer treats as "installed"
+    3. Dropping the fake exe into steamapps/common/<installdir>/ so the
+       client attributes the process to Steam
+    Discord then sees an installed Steam game + a running process = detected.
     
     {Colors.BOLD}Database Sources:{Colors.RESET}
     • Primary: Discord Official API

@@ -30,10 +30,24 @@ from pathlib import Path
 AUTO_DELETE = False
 TIMER_MINUTES = 15
 STEAM_MANIFEST_PATH = None
+WINDOW_TITLE = None
+
+def window_title():
+    """Return the title to show on the timer window."""
+    if WINDOW_TITLE and str(WINDOW_TITLE).strip():
+        name = str(WINDOW_TITLE)
+    else:
+        try:
+            name = Path(sys.executable).stem
+        except Exception:
+            name = "Timer"
+    name = name.replace("_", " ").replace("-", " ")
+    name = " ".join(name.split())
+    return name or "Timer"
 
 class TimerApp:
     def __init__(self, root, minutes=15):
-        root.title("Timer")
+        root.title(window_title())
         root.geometry("400x250")
         root.resizable(False, False)
         root.configure(bg="#1a1a1a")
@@ -128,11 +142,16 @@ class GameFaker:
         self.chosen_path = config.CHOSEN_FOLDER
         self._created_files = []
         self._created_dirs = []
+        self._created_registry_keys = []
         self._processes = []
 
     def register_created_file(self, path: Path) -> None:
         """Register a file to be deleted on cleanup."""
         self._created_files.append(Path(path))
+
+    def register_created_registry_key(self, appid: int | str) -> None:
+        """Register a Steam registry key to be removed on cleanup."""
+        self._created_registry_keys.append(appid)
 
     def register_parent_dirs(self, path: Path, limit_dir: Path) -> None:
         """Register parent directories of *path* up to *limit_dir* to check for deletion on cleanup."""
@@ -143,15 +162,19 @@ class GameFaker:
                 self._created_dirs.append(parent)
             parent = parent.parent
 
-    def copy_exe_to(self, target_path: Path) -> None:
+    def copy_exe_to(self, target_path: Path, title: str | None = None) -> None:
         """Copy the faker executable to *target_path*.
 
         In source mode, also creates a ``_orbshacker_timer.pyw`` next to
         the target so the renamed Python interpreter can run it.
+        *title* is the game name shown on the timer window; it defaults to
+        the target file name.
         """
         target_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(self._source_exe, target_path)
         self.register_created_file(target_path)
+
+        window_title = str(title).strip() if title else target_path.stem
 
         target_path_str = str(target_path).replace("\\", "/")
         if "steamapps/common" in target_path_str:
@@ -166,6 +189,7 @@ class GameFaker:
             "CHOSEN_FOLDER": str(config.CHOSEN_FOLDER).replace("\\", "/"),
             "AUTO_DELETE": config.AUTO_DELETE,
             "TIMER_MINUTES": config.TIMER_MINUTES,
+            "WINDOW_TITLE": window_title,
         }
         manifest_path = getattr(config, "STEAM_MANIFEST_PATH", None)
         if manifest_path:
@@ -182,16 +206,17 @@ class GameFaker:
                 pass
         else:
             timer_script = target_path.parent / "_orbshacker_timer.pyw"
-            if not timer_script.exists():
-                code = _TIMER_PYW_CODE
-                code = code.replace("AUTO_DELETE = False", f"AUTO_DELETE = {config.AUTO_DELETE}")
-                code = code.replace("TIMER_MINUTES = 15", f"TIMER_MINUTES = {config.TIMER_MINUTES}")
-                if manifest_path:
-                    code = code.replace("STEAM_MANIFEST_PATH = None", f"STEAM_MANIFEST_PATH = {repr(str(manifest_path))}")
-                timer_script.write_text(code, encoding="utf-8")
-                self.register_created_file(timer_script)
+            # always rewritten so a re-run picks up newer timer code/settings
+            code = _TIMER_PYW_CODE
+            code = code.replace("AUTO_DELETE = False", f"AUTO_DELETE = {config.AUTO_DELETE}")
+            code = code.replace("TIMER_MINUTES = 15", f"TIMER_MINUTES = {config.TIMER_MINUTES}")
+            code = code.replace("WINDOW_TITLE = None", f"WINDOW_TITLE = {window_title!r}")
+            if manifest_path:
+                code = code.replace("STEAM_MANIFEST_PATH = None", f"STEAM_MANIFEST_PATH = {repr(str(manifest_path))}")
+            timer_script.write_text(code, encoding="utf-8")
+            self.register_created_file(timer_script)
 
-    def create_fake_game(self, exe_name: str) -> Path | None:
+    def create_fake_game(self, exe_name: str, title: str | None = None) -> Path | None:
         """Create fake game executable under Desktop/<FAKE_EXE_DIR>/."""
         if not exe_name.lower().endswith('.exe'):
             exe_name += '.exe'
@@ -199,7 +224,7 @@ class GameFaker:
         target_path = self.chosen_path / config.FAKE_EXE_DIR / exe_name
         try:
             loading_animation(f"Creating {exe_name.split('/')[-1]}", 0.8)
-            self.copy_exe_to(target_path)
+            self.copy_exe_to(target_path, title=title)
             print_color(f"[OK] Created: {target_path}", Colors.GREEN, bold=True)
             return target_path
         except Exception as e:
@@ -258,7 +283,7 @@ class GameFaker:
             return False
 
     def cleanup(self) -> None:
-        """Clean up all launched processes and created files if AUTO_DELETE is enabled."""
+        """Clean up all launched processes, created files and registry keys if AUTO_DELETE is enabled."""
         if not config.AUTO_DELETE:
             return
 
@@ -300,6 +325,15 @@ class GameFaker:
             try:
                 if dir_path.exists() and not any(dir_path.iterdir()):
                     dir_path.rmdir()
+            except Exception:
+                pass
+
+        # 4. Remove fake Steam registry entries
+        for appid in self._created_registry_keys:
+            try:
+                from .steam import unregister_steam_app
+                if unregister_steam_app(appid):
+                    print_color(f"[OK] Removed Steam registry key for app {appid}", Colors.GRAY)
             except Exception:
                 pass
 

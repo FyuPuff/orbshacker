@@ -4,9 +4,14 @@ timer.py – Fake game process: a simple countdown timer.
 When orbshacker copies itself (or pythonw.exe) and renames it to a game's
 executable name, the copy runs this timer. Discord sees the process name
 and thinks the game is running.
+
+The timer window is titled with the game being faked, so it is obvious
+which process belongs to which game when several are running at once.
 """
 
+import sys
 import tkinter as tk
+from pathlib import Path
 
 WINDOW_TITLE     = "Timer"
 WINDOW_SIZE      = "400x250"
@@ -18,10 +23,33 @@ DONE_COLOR       = "#ff6b6b"
 TIMER_MINUTES    = 15
 
 
+def format_title(name: str) -> str:
+    """Turn a raw game/executable name into a readable window title."""
+    cleaned = str(name).replace("_", " ").replace("-", " ")
+    cleaned = " ".join(cleaned.split())
+    return cleaned or WINDOW_TITLE
+
+
+def resolve_window_title(override: str | None = None) -> str:
+    """Return the title to show on the timer window.
+
+    Order of preference:
+    1. *override* (the game name baked into the faked process, if any)
+    2. the name of the running executable (a renamed copy is the game name)
+    3. the generic fallback title
+    """
+    if override and str(override).strip():
+        return format_title(override)
+    try:
+        return format_title(Path(sys.executable).stem)
+    except Exception:
+        return WINDOW_TITLE
+
+
 class TimerApp:
-    def __init__(self, root: tk.Tk, minutes: int = 15):
+    def __init__(self, root: tk.Tk, minutes: int = 15, title: str | None = None):
         self.root: tk.Tk = root
-        self.root.title(WINDOW_TITLE)
+        self.root.title(resolve_window_title(title))
         self.root.geometry(WINDOW_SIZE)
         self.root.resizable(False, False)
         self.root.configure(bg=BG_COLOR)
@@ -60,9 +88,7 @@ class TimerApp:
         if not config.AUTO_DELETE:
             return
 
-        import sys
         import subprocess
-        from pathlib import Path
 
         # Resolve paths
         if getattr(sys, "frozen", False):
@@ -121,8 +147,8 @@ class TimerApp:
         sys.exit(0)
 
 
-def run_timer(minutes: int = 15) -> None:
+def run_timer(minutes: int = 15, title: str | None = None) -> None:
     """Entry point for the fake game process."""
     root = tk.Tk()
-    TimerApp(root, minutes)
+    TimerApp(root, minutes, title)
     root.mainloop()

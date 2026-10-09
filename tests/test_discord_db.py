@@ -40,6 +40,27 @@ SAMPLE_GAMES = [
             {"os": "win32", "name": "FortniteLauncher.exe"},
         ],
     },
+    # Real shape of a game Discord ships without any process name
+    {
+        "id": "4",
+        "name": "EA Sports FC 27",
+        "aliases": [],
+        "executables": [],
+        "third_party_skus": [
+            {"distributor": "xbox", "id": "ABCD1234"},
+            {"distributor": "steam", "id": "4080220"},
+        ],
+    },
+    {
+        "id": "5",
+        "name": "Marathon",
+        "aliases": [],
+        "executables": [],
+        "third_party_skus": [
+            {"distributor": "steam", "id": "3065800"},
+            {"distributor": "steam", "id": "4254230"},
+        ],
+    },
 ]
 
 
@@ -90,3 +111,34 @@ class TestFilterWin32Exes:
         all_exes = db.get_all_executables(SAMPLE_GAMES[0])
         assert "Minecraft.Windows.exe" in all_exes
         assert ">Minecraft.Windows.exe" not in all_exes
+
+
+class TestSteamMetadata:
+    def test_has_win32_executable(self):
+        db = _make_db_with_games(SAMPLE_GAMES)
+        assert db.has_win32_executable(SAMPLE_GAMES[0]) is True
+        # shipped with an empty executables list - process name can never match
+        assert db.has_win32_executable(SAMPLE_GAMES[3]) is False
+
+    def test_get_steam_appids(self):
+        db = _make_db_with_games(SAMPLE_GAMES)
+        assert db.get_steam_appids(SAMPLE_GAMES[3]) == ["4080220"]
+        assert db.get_steam_appids(SAMPLE_GAMES[4]) == ["3065800", "4254230"]
+        assert db.get_steam_appids(SAMPLE_GAMES[0]) == []
+
+    def test_needs_steam_mode(self):
+        db = _make_db_with_games(SAMPLE_GAMES)
+        assert db.needs_steam_mode(SAMPLE_GAMES[3]) is True
+        assert db.needs_steam_mode(SAMPLE_GAMES[4]) is True
+        # has a process name, plain mode is enough
+        assert db.needs_steam_mode(SAMPLE_GAMES[0]) is False
+
+    def test_needs_steam_mode_false_without_sku(self):
+        db = _make_db_with_games(SAMPLE_GAMES)
+        no_sku = {
+            "id": "6",
+            "name": "Mystery Game",
+            "aliases": [],
+            "executables": [],
+        }
+        assert db.needs_steam_mode(no_sku) is False
