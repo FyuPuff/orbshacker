@@ -12,6 +12,7 @@ from .ui import Colors, print_color, print_banner, print_menu, show_credits
 from .faker import GameFaker, manual_mode
 from .discord_db import DiscordGamesDB, database_mode
 from .steam import steam_quest_mode
+from .non_games import non_games_mode
 from .updater import auto_update
 from .errors import DatabaseLoadError
 
@@ -51,7 +52,7 @@ def main() -> None:
                     print_color(f"   Active Database: {db.source} ({len(db.games)} games)", Colors.GRAY)
 
                 print_menu()
-                choice = input(f"{Colors.BOLD}Select option{Colors.RESET} [1-5]: ").strip()
+                choice = input(f"{Colors.BOLD}Select option{Colors.RESET} [1-6]: ").strip()
 
                 if choice == '1':
                     database_mode(db, faker)
@@ -60,14 +61,16 @@ def main() -> None:
                 elif choice == '3':
                     steam_quest_mode(faker)
                 elif choice == '4':
-                    show_credits()
+                    non_games_mode(faker)
                 elif choice == '5':
+                    show_credits()
+                elif choice == '6':
                     print_color(f"\n[*] Thanks for using Orb Quest Faker!", Colors.CYAN, bold=True)
                     print_color(f"[*] Developed by {config.DEVELOPER}", Colors.GRAY)
                     print_color("\n[*] May your orbs be plentiful!", Colors.MAGENTA)
                     break
                 else:
-                    print_color("\n[ERROR] Invalid option - try 1, 2, 3, 4 or 5", Colors.RED)
+                    print_color("\n[ERROR] Invalid option - try 1, 2, 3, 4, 5 or 6", Colors.RED)
                     time.sleep(config.SLEEP_SHORT)
 
             except KeyboardInterrupt:

@@ -100,8 +100,9 @@ def print_menu() -> None:
     print(f"  {Colors.BOLD}{Colors.GREEN}1.{Colors.RESET} Search Discord database (Official API)")
     print(f"  {Colors.BOLD}{Colors.GREEN}2.{Colors.RESET} Manual mode (custom executable)")
     print(f"  {Colors.BOLD}{Colors.YELLOW}3.{Colors.RESET} Steam Quest Mode  {Colors.YELLOW}[NEW - for Marathon, Toxic Commando…]{Colors.RESET}")
-    print(f"  {Colors.BOLD}{Colors.GREEN}4.{Colors.RESET} Credits & Info")
-    print(f"  {Colors.BOLD}{Colors.RED}5.{Colors.RESET} Exit\n")
+    print(f"  {Colors.BOLD}{Colors.GREEN}4.{Colors.RESET} Non-Games Mode   {Colors.GREEN}[Firefox, Chrome, Opera GX...]{Colors.RESET}")
+    print(f"  {Colors.BOLD}{Colors.GREEN}5.{Colors.RESET} Credits & Info")
+    print(f"  {Colors.BOLD}{Colors.RED}6.{Colors.RESET} Exit\n")
 
 
 def show_credits() -> None:
@@ -137,6 +138,15 @@ def show_credits() -> None:
     3. Dropping the fake exe into steamapps/common/<installdir>/ so the
        client attributes the process to Steam
     Discord then sees an installed Steam game + a running process = detected.
+
+    {Colors.BOLD}Non-Games Mode (NEW):{Colors.RESET}
+    Discord tracks some apps separately from games (Firefox, Chrome,
+    Opera GX, ...) in its non-games list. Those are detected by process
+    name too, but they are not in the games database:
+    1. Loads https://cdn.discordapp.com/detectables/non-games.json
+    2. Lets you pick any app (including new ones Discord adds later)
+    3. Creates the fake process with the exact name Discord expects
+    4. Passes any required command line arguments automatically
     
     {Colors.BOLD}Database Sources:{Colors.RESET}
     • Primary: Discord Official API

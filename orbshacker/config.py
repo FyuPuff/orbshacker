@@ -178,6 +178,7 @@ REPO_URL          = f"https://github.com/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}"
 
 # ── Network endpoints (internal – not in settings.py) ─────────────────────────
 DISCORD_API_URL        = "https://discord.com/api/v9/applications/detectable"
+NON_GAMES_URL          = "https://cdn.discordapp.com/detectables/non-games.json"
 GITHUB_BACKUP_URL      = (
     "https://gist.githubusercontent.com/Cynosphere/"
     "c1e77f77f0e565ddaac2822977961e76/raw/gameslist.json"

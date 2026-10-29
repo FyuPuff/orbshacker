@@ -232,17 +232,34 @@ class GameFaker:
             print_color("[!] Check file permissions or disk space", Colors.YELLOW)
             return None
 
-    def launch_executable(self, exe_path: Path) -> bool:
-        """Launch the fake game process in background."""
+    def launch_executable(
+        self,
+        exe_path: Path,
+        arguments: str | list[str] | None = None,
+    ) -> bool:
+        """Launch the fake game process in background.
+
+        *arguments* is for Discord entries that require command line flags
+        (some non-games entries do). They are appended after the timer
+        script, so the fake process shows them in its command line.
+        """
+        if isinstance(arguments, str):
+            import shlex
+            try:
+                extra_args = shlex.split(arguments, posix=False)
+            except ValueError:
+                extra_args = [arguments]
+        else:
+            extra_args = list(arguments or [])
         try:
             loading_animation("Launching process", 0.8)
 
             if self._frozen:
-                args = [str(exe_path)]
+                args = [str(exe_path), *extra_args]
                 env = None
             else:
                 timer_script = exe_path.parent / "_orbshacker_timer.pyw"
-                args = [str(exe_path), str(timer_script)]
+                args = [str(exe_path), str(timer_script), *extra_args]
                 env = os.environ.copy()
                 base_prefix = Path(sys.base_prefix)
                 env["PYTHONHOME"] = str(base_prefix)

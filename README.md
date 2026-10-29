@@ -60,6 +60,20 @@ Verified against the shipped client (Discord 1.0.9259, `modules/discord_utils-1/
 
 <br/>
 
+## 🌐 Non-Games Mode
+
+Browsers and a few other apps Discord tracks are **not games** and are not in the games database at all. Firefox is a good example: the `Firefox` entry in the games API has an empty `executables` list, so process-name spoofing through option 1 can never match it. They live in a separate list:
+
+```
+https://cdn.discordapp.com/detectables/non-games.json
+```
+
+Non-Games Mode downloads that list live, so anything Discord adds later (browsers, quest helpers, boosters) shows up in the tool without an update. Pick an app, and it creates a fake process with the exact name Discord expects, including any required command line arguments.
+
+Current entries: Comet, Opera GX, Chrome, Discord Quest Helper, Firefox, GearUP.
+
+<br/>
+
 ## Features
 
 **Automatic Game Detection** pulls the latest detectable game list from Discord's official API. Smart search lets you find games by name or abbreviation PUBG, LoL, CSGO. Auto-launch handles everything in the background.
@@ -75,6 +89,8 @@ Verified against the shipped client (Discord 1.0.9259, `modules/discord_utils-1/
 **Backup Database** falls back to a GitHub archive if Discord's API is unavailable, so the tool keeps working even when the primary source is down.
 
 **Manual Mode** supports custom executable names if you need to spoof something not in the database.
+
+**Non-Games Mode** fakes browsers and other apps Discord tracks separately from games (Firefox, Chrome, Opera GX), loading Discord's live non-games list so new entries work without an update.
 
 **Beautiful Interface** is a colored terminal UI with loading animations, because plain text is boring.
 
@@ -126,9 +142,11 @@ python -m orbshacker
 
 `3` Steam special quest mode
 
-`4` Credits and project info
+`4` Non-Games mode (Firefox, Chrome, Opera GX...)
 
-`5` Exit
+`5` Credits and project info
+
+`6` Exit
 
 ### Completing all quests in 15 minutes
 
@@ -144,6 +162,8 @@ When the faked game executable runs, it acts as a standalone countdown timer wit
 
 Steam Quest Mode adds a layer: it registers the app in the Steam registry, writes an optional `appmanifest_<appid>.acf`, and places the executable in `steamapps/common/<installdir>/`, which is what Discord's Steam observer looks at. It is required for games Discord publishes without a process name.
 
+Non-Games Mode uses Discord's separate non-games list (`/detectables/non-games.json`). Same process-name trick, but for apps that never appear in the games database, with the required arguments appended to the faked process command line.
+
 <br/>
 
 ## Project Structure
@@ -158,6 +178,7 @@ orbshacker/
 │   ├── faker.py           Fake executable creation and launch logic
 │   ├── discord_db.py      Game database loading, search, and selection
 │   ├── steam.py           Steam registry helpers and manifest generation
+│   ├── non_games.py       Non-games (browser/app) detection mode
 │   ├── updater.py         Auto-update from GitHub releases
 │   ├── net.py             HTTP helpers
 │   ├── ui.py              Terminal colors, animations, prompts

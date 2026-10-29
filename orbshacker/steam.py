@@ -217,13 +217,33 @@ def list_installed_steam_apps() -> dict[str, dict[str, Any]]:
     return apps
 
 
-def is_steam_app_registered(appid: int | str) -> bool:
-    """True when Discord's observer would consider *appid* installed."""
+def steam_app_key_exists(appid: int | str) -> bool:
+    """True when the app has a key under ``Apps``, installed or not."""
     if sys.platform != 'win32' or _winreg is None:
         return False
     try:
         with _winreg.OpenKey(_winreg.HKEY_CURRENT_USER, steam_app_key(appid)):
             return True
+    except OSError:
+        return False
+
+
+def is_steam_app_registered(appid: int | str) -> bool:
+    """True when Discord's observer would consider *appid* installed.
+
+    The key alone is not enough: Steam creates ``Apps\\<appid>`` keys for
+    games it knows about and leaves ``Installed`` at 0. Discord ignores
+    those, so the flag has to be checked (and repaired by the caller).
+    """
+    if sys.platform != 'win32' or _winreg is None:
+        return False
+    try:
+        with _winreg.OpenKey(_winreg.HKEY_CURRENT_USER, steam_app_key(appid)) as key:
+            try:
+                installed = _winreg.QueryValueEx(key, "Installed")[0]
+            except OSError:
+                return False
+            return bool(installed)
     except OSError:
         return False
 
@@ -564,11 +584,13 @@ def steam_quest_mode(faker: GameFaker, preset: dict[str, Any] | None = None) -> 
 
     # 1. Register the app so Discord's steam observer treats it as installed
     already_registered = is_steam_app_registered(appid)
+    key_existed = steam_app_key_exists(appid)
     if already_registered:
         print_color(f"[OK] App {appid} is already registered in the Steam registry", Colors.GRAY)
     elif register_steam_app(appid, name=discord_name):
         print_color(f"[OK] Registered {registry_key} (Installed=1)", Colors.GREEN, bold=True)
-        faker.register_created_registry_key(appid)
+        if not key_existed:
+            faker.register_created_registry_key(appid)
     else:
         print_color("[!] Could not write the registry - detection will likely fail", Colors.RED, bold=True)
 
